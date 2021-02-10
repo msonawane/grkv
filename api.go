@@ -5,6 +5,7 @@ import (
 
 	"github.com/dgraph-io/badger/v2"
 	"github.com/msonawane/grkv/kvpb"
+	"go.uber.org/zap"
 )
 
 // get keys.
@@ -74,15 +75,48 @@ func (s *Store) delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Succ
 
 // Set keys.
 func (s *Store) Set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, error) {
-	return s.set(ctx, req)
+	// s.logger.Info("set on", zap.String("node", s.mlNodeName), zap.Int("clients", len(s.grpcClients)))
+	success, err := s.set(ctx, req)
+	if err != nil || !success.Success {
+		return success, err
+	}
+	for _, client := range s.grpcClients {
+		// s.logger.Info("sending data to neighbours", zap.Any("node", client))
+		// success, err := client.GRPCSet(ctx, req)
+		go client.GRPCSet(ctx, req)
+		// s.logger.Info("result of grpc call", zap.Any("success", success), zap.Error(err))
+	}
+
+	return success, err
 }
 
 // Delete keys.
 func (s *Store) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Success, error) {
-	return s.delete(ctx, req)
+	success, err := s.delete(ctx, req)
+	if err != nil || !success.Success {
+		return success, err
+	}
+	for _, client := range s.grpcClients {
+		s.logger.Info("sending data to neighbours", zap.Any("node", client))
+		client.GRPCDelete(ctx, req)
+	}
+
+	return success, err
 }
 
 // Get keys.
 func (s *Store) Get(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResponse, error) {
-	return s.get(ctx, in)
+	gr, err := s.get(ctx, in)
+	if len(gr.KeysNotFound) == 0 {
+		return gr, err
+	}
+	// s.logger.Info("Getting from neighbour ")
+	// req := &kvpb.GetRequest{
+	// 	Keys: gr.KeysNotFound,
+	// }
+	// for _, client := range s.grpcClients {
+	// 	resp, err := client.GRPCGet(ctx, req)
+	// 	// fmt.Printf("resp: %#v, err: %#v\n", resp, err)
+	// }
+	return gr, err
 }

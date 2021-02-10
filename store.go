@@ -1,9 +1,16 @@
 package grkv
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgraph-io/badger/v2"
+	"github.com/hashicorp/memberlist"
 	"github.com/msonawane/grkv/kvpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -18,8 +25,13 @@ type Options struct {
 	GCInterval          time.Duration   // GCInterval is the interval between conditionally running the garbage collection process, based on the size of the vlog. By default, runs every 1m.
 	MandatoryGCInterval time.Duration   // MandatoryGCInterval is the interval between mandatory running the garbage collection process. By default, runs every 10m.
 	GCThreshold         int64           // GCThreshold sets threshold in bytes for the vlog size to be included in the garbage collection cycle. By default, 1GB.
-	GRPCIP              string
-	GRPCPort            int
+	GRPCIP              string          // GRPC IP
+	GRPCPort            int             // GRPC Port
+	MLBindAddr          string          // MLBindAddr where memberlist listens on
+	MLBindPort          int             // MLBindPort where memberlist listens on.
+	MLName              string          // name of memberlist node
+	MLMembers           string          // List of members.
+
 }
 
 // Store holds database.
@@ -32,12 +44,55 @@ type Store struct {
 	grpcServer          *grpc.Server
 	grpcIP              string
 	grpcPort            int
+	grpcClients         map[string]kvpb.KeyValueStoreClient
+	grpcClientsLock     sync.RWMutex
+	ml                  *memberlist.Memberlist
+	mlNodeName          string
+
 	kvpb.UnimplementedKeyValueStoreServer
 }
 
 // New returns Store
 func New(o *Options, logger *zap.Logger) (*Store, error) {
-	s := &Store{logger: logger}
+	s := &Store{
+		logger:      logger,
+		grpcIP:      o.GRPCIP,
+		grpcPort:    o.GRPCPort,
+		grpcClients: make(map[string]kvpb.KeyValueStoreClient),
+	}
+
+	// buld memberlist
+	hostname, _ := os.Hostname()
+	s.mlNodeName = hostname + "_" + o.MLBindAddr + "_" + strconv.Itoa(o.MLBindPort)
+	mlc := memberlist.DefaultLANConfig()
+	mlc.Events = s
+	mlc.BindPort = o.MLBindPort
+	mlc.Name = s.mlNodeName
+	mlc.BindAddr = o.MLBindAddr
+	ml, err := memberlist.Create(mlc)
+	if err != nil {
+		return nil, fmt.Errorf("mkv: can't create memberlist: %w", err)
+	}
+	//  the only way memberlist would be empty here, following create is if
+	// the current node suddenly died. Still, we check to be safe.
+	if len(ml.Members()) == 0 {
+		return nil, errors.New("memberlist can't find self")
+	}
+
+	if len(o.MLMembers) > 0 {
+		parts := strings.Split(o.MLMembers, ",")
+		_, err := ml.Join(parts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	s.ml = ml
+
+	ml.LocalNode().Meta = []byte("grpc address")
+
+	logger.Info("members", zap.Any("members", ml.Members()))
+
 	// build badger options
 	if o.BadgerOptions == nil {
 		defaultOpts := badger.DefaultOptions(o.Path)
@@ -106,6 +161,10 @@ func (s *Store) runVlogGC(threshold int64) {
 // Close is used to gracefully close the Store.
 func (s *Store) Close() error {
 	s.logger.Info("closing store")
+	err := s.ml.Leave(1 * time.Second)
+	if err != nil {
+		s.logger.Error("error leaving member list", zap.Error(err))
+	}
 	s.stopGRPC()
 	if s.vlogTicker != nil {
 		s.vlogTicker.Stop()
@@ -114,9 +173,9 @@ func (s *Store) Close() error {
 		s.mandatoryVlogTicker.Stop()
 	}
 
-	dbCloseErr := s.db.Close()
-	if dbCloseErr != nil {
-		s.logger.Error("error closing DB", zap.Error(dbCloseErr))
+	err = s.db.Close()
+	if err != nil {
+		s.logger.Error("error closing DB", zap.Error(err))
 	}
-	return dbCloseErr
+	return err
 }

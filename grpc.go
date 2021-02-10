@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/msonawane/grkv/kvpb"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -21,12 +22,16 @@ func (s *Store) GRPCGet(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResp
 
 // GRPCSet keys.
 func (s *Store) GRPCSet(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, error) {
+	s.logger.Info("GRPCSet on ", zap.String("node", s.mlNodeName))
+
 	return s.set(ctx, req)
 }
 
 // startGRPC server.
 func (s *Store) startGRPC() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.grpcIP, s.grpcPort))
+	addr := fmt.Sprintf("%s:%d", s.grpcIP, s.grpcPort)
+	s.logger.Info("starting grpc server on", zap.String("grpc_addr", addr))
+	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
@@ -41,4 +46,32 @@ func (s *Store) startGRPC() error {
 func (s *Store) stopGRPC() {
 	s.logger.Info("stopping GRPC server")
 	s.grpcServer.GracefulStop()
+}
+
+func (s *Store) newGRPCClient(name, addr string) error {
+	s.grpcClientsLock.Lock()
+	defer s.grpcClientsLock.Unlock()
+
+	if s.mlNodeName != name {
+		addr = fmt.Sprintf("%s:%d", addr, s.grpcPort)
+		s.logger.Info("creating grpc client for", zap.String("node", name), zap.String("addr", addr))
+		ctx := context.Background()
+		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure())
+		if err != nil {
+			s.logger.Error("err creating grpc client", zap.Error(err))
+			return err
+		}
+		client := kvpb.NewKeyValueStoreClient(conn)
+		s.grpcClients[name] = client
+		fmt.Printf("client: %#v\n", client)
+
+	}
+	return nil
+
+}
+
+func (s *Store) removeGRPCClient(nodeName string) {
+	s.grpcClientsLock.Lock()
+	defer s.grpcClientsLock.Unlock()
+	delete(s.grpcClients, nodeName)
 }

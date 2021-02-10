@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/msonawane/grkv/kvpb"
 )
@@ -17,6 +18,9 @@ var testData = []struct {
 }
 
 func TestSet(t *testing.T) {
+
+	time.Sleep(10 * time.Second)
+
 	ctx := context.Background()
 	for _, tt := range testData {
 		t.Run(tt.key, func(t *testing.T) {
@@ -52,6 +56,46 @@ func TestSet(t *testing.T) {
 		}
 		if !success.Success {
 			t.Errorf("set did not succied")
+		}
+	})
+
+	t.Run("zcheck replication", func(t *testing.T) {
+		req := &kvpb.SetRequest{}
+		for _, d := range testData {
+			req.Data = append(req.Data, &kvpb.KeyValue{
+				Key:   []byte(d.key),
+				Value: []byte(d.value),
+			})
+		}
+
+		success, err := store.Set(ctx, req)
+		if err != nil {
+			t.Error(err)
+		}
+		if !success.Success {
+			t.Errorf("set did not succied")
+		}
+		keys := [][]byte{}
+		for _, tt := range testData {
+			keys = append(keys, []byte(tt.key))
+			// fmt.Println(tt.key)
+		}
+		keys = append(keys, []byte("not-in-db"))
+		gr := &kvpb.GetRequest{Keys: keys}
+
+		resp, err := store2.Get(ctx, gr)
+		if err != nil {
+			t.Error(err)
+		}
+		if len(resp.Data) != len(keys)-1 {
+			t.Errorf("response.Data size should match keys size, expected %d, got: %d", len(keys)-1, len(resp.Data))
+		}
+
+		if len(resp.KeysNotFound) != 1 {
+			t.Errorf("response.KeysNotFound should have %d keys, got: %d", 1, len(resp.KeysNotFound))
+		}
+		if bytes.Compare(resp.KeysNotFound[0], []byte("not-in-db")) != 0 {
+			t.Errorf("keys not found should have not-in-db; got %s", resp.KeysNotFound[0])
 		}
 	})
 

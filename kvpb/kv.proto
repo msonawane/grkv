@@ -1,0 +1,38 @@
+syntax = "proto3";
+option go_package = "github.com/msoanwane/grkv/kvpb";
+
+package kvpb;
+
+service KeyValueStore {
+    rpc GRPCSet(SetRequest) returns (Success);
+    rpc GRPCGet(GetRequest) returns (GetResponse);
+    rpc GRPCDelete(DeleteRequest) returns (Success);
+  }
+
+
+message KeyValue {
+    bytes key = 1;
+    bytes value = 2;
+    uint64 expires_at = 3;
+}
+
+message GetRequest {
+    repeated bytes keys = 1;
+}
+
+message DeleteRequest {
+    repeated bytes keys = 1;
+}
+
+message GetResponse {
+    repeated KeyValue data = 1;
+    repeated bytes keysNotFound = 2;
+}
+
+message SetRequest {
+    repeated KeyValue data = 1;
+}
+
+message Success {
+    bool success = 1;
+}

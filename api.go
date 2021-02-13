@@ -119,6 +119,10 @@ func (s *Store) Get(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResponse
 	}
 	gr.KeysNotFound = resp.KeysNotFound
 	gr.Data = append(gr.Data, resp.Data...)
+	setRequest := &kvpb.SetRequest{
+		Data: resp.Data,
+	}
+	go s.set(ctx, setRequest)
 
 	return gr, err
 }

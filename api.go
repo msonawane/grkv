@@ -80,11 +80,8 @@ func (s *Store) Set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, e
 	if err != nil || !success.Success {
 		return success, err
 	}
-	for _, client := range s.grpcClients {
-		// s.logger.Info("sending data to neighbours", zap.Any("node", client))
-		// success, err := client.GRPCSet(ctx, req)
-		go client.GRPCSet(ctx, req)
-		// s.logger.Info("result of grpc call", zap.Any("success", success), zap.Error(err))
+	for name, client := range s.grpcClients {
+		go propogateSet(s.logger, client, name, req)
 	}
 
 	return success, err
@@ -96,9 +93,8 @@ func (s *Store) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Succ
 	if err != nil || !success.Success {
 		return success, err
 	}
-	for _, client := range s.grpcClients {
-		s.logger.Info("sending data to neighbours", zap.Any("node", client))
-		client.GRPCDelete(ctx, req)
+	for name, client := range s.grpcClients {
+		go propogateDelete(s.logger, client, name, req)
 	}
 
 	return success, err
@@ -107,16 +103,37 @@ func (s *Store) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Succ
 // Get keys.
 func (s *Store) Get(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResponse, error) {
 	gr, err := s.get(ctx, in)
-	if len(gr.KeysNotFound) == 0 {
+	if len(gr.KeysNotFound) == 0 && err == nil {
 		return gr, err
 	}
-	// s.logger.Info("Getting from neighbour ")
-	// req := &kvpb.GetRequest{
-	// 	Keys: gr.KeysNotFound,
-	// }
-	// for _, client := range s.grpcClients {
-	// 	resp, err := client.GRPCGet(ctx, req)
-	// 	// fmt.Printf("resp: %#v, err: %#v\n", resp, err)
-	// }
+	// try getting from random neighbour.
+	s.logger.Info("Getting from neighbour ")
+	req := &kvpb.GetRequest{
+		Keys: gr.KeysNotFound,
+	}
+	var resp *kvpb.GetResponse
+	for _, client := range s.grpcClients {
+		resp, err = client.GRPCGet(ctx, req)
+		break
+		// fmt.Printf("resp: %#v, err: %#v\n", resp, err)
+	}
+	gr.KeysNotFound = resp.KeysNotFound
+
 	return gr, err
+}
+
+func propogateSet(logger *zap.Logger, client kvpb.KeyValueStoreClient, name string, req *kvpb.SetRequest) {
+	ctx := context.Background()
+	success, err := client.GRPCSet(ctx, req)
+	if err != nil {
+		logger.Error("error wrinting to remote node", zap.Error(err), zap.Any("success", success), zap.String("node", name))
+	}
+}
+
+func propogateDelete(logger *zap.Logger, client kvpb.KeyValueStoreClient, name string, req *kvpb.DeleteRequest) {
+	ctx := context.Background()
+	success, err := client.GRPCDelete(ctx, req)
+	if err != nil {
+		logger.Error("error wrinting to remote node", zap.Error(err), zap.Any("success", success), zap.String("node", name))
+	}
 }

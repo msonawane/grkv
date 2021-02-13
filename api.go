@@ -118,6 +118,7 @@ func (s *Store) Get(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResponse
 		// fmt.Printf("resp: %#v, err: %#v\n", resp, err)
 	}
 	gr.KeysNotFound = resp.KeysNotFound
+	gr.Data = append(gr.Data, resp.Data...)
 
 	return gr, err
 }

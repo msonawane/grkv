@@ -106,23 +106,27 @@ func (s *Store) Get(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResponse
 	if len(gr.KeysNotFound) == 0 && err == nil {
 		return gr, err
 	}
-	// try getting from random neighbour.
-	s.logger.Info("Getting from neighbour ")
-	req := &kvpb.GetRequest{
-		Keys: gr.KeysNotFound,
+
+	if len(s.grpcClients) > 0 {
+
+		// try getting from random neighbour.
+		s.logger.Info("Getting from neighbour ")
+		req := &kvpb.GetRequest{
+			Keys: gr.KeysNotFound,
+		}
+		var resp *kvpb.GetResponse
+		for _, client := range s.grpcClients {
+			resp, err = client.GRPCGet(ctx, req)
+			break
+			// fmt.Printf("resp: %#v, err: %#v\n", resp, err)
+		}
+		// gr.KeysNotFound = resp.KeysNotFound
+		gr.Data = append(gr.Data, resp.Data...)
+		setRequest := &kvpb.SetRequest{
+			Data: resp.Data,
+		}
+		go s.set(ctx, setRequest)
 	}
-	var resp *kvpb.GetResponse
-	for _, client := range s.grpcClients {
-		resp, err = client.GRPCGet(ctx, req)
-		break
-		// fmt.Printf("resp: %#v, err: %#v\n", resp, err)
-	}
-	gr.KeysNotFound = resp.KeysNotFound
-	gr.Data = append(gr.Data, resp.Data...)
-	setRequest := &kvpb.SetRequest{
-		Data: resp.Data,
-	}
-	go s.set(ctx, setRequest)
 
 	return gr, err
 }
@@ -141,4 +145,12 @@ func propogateDelete(logger *zap.Logger, client kvpb.KeyValueStoreClient, name s
 	if err != nil {
 		logger.Error("error wrinting to remote node", zap.Error(err), zap.Any("success", success), zap.String("node", name))
 	}
+}
+
+func (s *Store) GetWithStringKeys(ctx context.Context, keys ...string) (*kvpb.GetResponse, error) {
+	gr := kvpb.GetRequest{}
+	for _, key := range keys {
+		gr.Keys = append(gr.Keys, []byte(key))
+	}
+	return s.Get(ctx, &gr)
 }

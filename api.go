@@ -38,11 +38,12 @@ func (s *Store) set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, e
 	defer wb.Cancel()
 
 	for _, pair := range req.Data {
-		entry := badger.Entry{Key: pair.Key, Value: pair.Value, ExpiresAt: pair.ExpiresAt}
-		err := wb.SetEntry(&entry)
-		if err != nil {
-
-			return &success, err
+		if pair != nil {
+			entry := badger.Entry{Key: pair.Key, Value: pair.Value, ExpiresAt: pair.ExpiresAt}
+			err := wb.SetEntry(&entry)
+			if err != nil {
+				return &success, err
+			}
 		}
 	}
 	err := wb.Flush()

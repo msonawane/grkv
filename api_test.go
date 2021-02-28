@@ -22,6 +22,17 @@ func TestSet(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	ctx := context.Background()
+	t.Run("test for nil data", func(t *testing.T) {
+		req := &kvpb.SetRequest{}
+		req.Data = make([]*kvpb.KeyValue, 3)
+		success, err := store.Set(ctx, req)
+		if err != nil {
+			t.Error(err)
+		}
+		if !success.Success {
+			t.Errorf("set failed")
+		}
+	})
 	for _, tt := range testData {
 		t.Run(tt.key, func(t *testing.T) {
 			req := kvpb.SetRequest{

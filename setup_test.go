@@ -1,19 +1,18 @@
-package grkv_test
+package grkv
 
 import (
 	"log"
 	"os"
 	"testing"
 
-	"github.com/msonawane/grkv"
 	"github.com/msonawane/grkv/kvpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 )
 
-var store *grkv.Store
-var store2 *grkv.Store
+var store *Store
+var store2 *Store
 
 var err error
 var lis *bufconn.Listener
@@ -21,7 +20,7 @@ var lis *bufconn.Listener
 const bufSize = 1024 * 1024
 
 func TestMain(m *testing.M) {
-	opts := grkv.Options{
+	opts := Options{
 		Path:       "/tmp/grkv-test1",
 		GRPCIP:     "127.0.0.1",
 		GRPCPort:   9001,
@@ -30,7 +29,7 @@ func TestMain(m *testing.M) {
 		MLMembers:  "127.0.0.1:8001",
 	}
 	logger, _ := zap.NewDevelopment()
-	store, err = grkv.New(&opts, logger)
+	store, err = New(&opts, logger)
 	if err != nil {
 		logger.Fatal("error creating store", zap.Error(err))
 	}
@@ -45,7 +44,7 @@ func TestMain(m *testing.M) {
 		}
 	}()
 
-	opts2 := grkv.Options{
+	opts2 := Options{
 		Path:       "/tmp/grkv-test2",
 		GRPCIP:     "127.0.0.2",
 		GRPCPort:   9001,
@@ -54,7 +53,7 @@ func TestMain(m *testing.M) {
 		MLMembers:  "127.0.0.1:8001",
 	}
 
-	store2, err = grkv.New(&opts2, logger)
+	store2, err = New(&opts2, logger)
 	if err != nil {
 		logger.Fatal("error creating store2", zap.Error(err))
 	}

@@ -1,4 +1,4 @@
-package grkv_test
+package grkv
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	fuzz "github.com/google/gofuzz"
 	"github.com/msonawane/grkv/kvpb"
 )
 
@@ -167,7 +168,42 @@ func TestDelete(t *testing.T) {
 		t.Error(err)
 	}
 	if !success.Success {
-		t.Errorf("delete did not succied")
+		t.Errorf("delete failed")
 	}
 
+}
+
+func TestFuzzingSet(t *testing.T) {
+	ctx := context.Background()
+	for i := 0; i < 1000; i++ {
+		sr := kvpb.SetRequest{}
+		f := fuzz.New().NilChance(0.5)
+		f.Fuzz(&sr)
+		t.Logf("sr: %#v\n", &sr)
+
+		success, err := store.set(ctx, &sr)
+		if err != nil {
+			t.Errorf("set failed, err: %v", err)
+		}
+		if !success.Success {
+			t.Errorf("set failed, success: %v", success)
+		}
+
+	}
+}
+
+func TestFuzzingGet(t *testing.T) {
+	ctx := context.Background()
+	for i := 0; i < 1000; i++ {
+		gr := kvpb.GetRequest{}
+		f := fuzz.New().NilChance(0.5)
+		f.Fuzz(&gr)
+		t.Logf("gr: %#v\n", &gr)
+
+		_, err := store.get(ctx, &gr)
+		if err != nil {
+			t.Errorf("set failed, err: %v", err)
+		}
+
+	}
 }

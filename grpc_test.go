@@ -1,4 +1,4 @@
-package grkv_test
+package grkv
 
 import (
 	"context"

@@ -33,6 +33,12 @@ func (s *Store) get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetRespons
 
 // Set keys.
 func (s *Store) set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, error) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("Panic detected ", zap.Any("stacktrace", r))
+		}
+	}()
 	success := kvpb.Success{Success: false}
 	wb := s.db.NewWriteBatch()
 	defer wb.Cancel()
@@ -57,7 +63,11 @@ func (s *Store) set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, e
 
 // Delete keys.
 func (s *Store) delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Success, error) {
-
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("Panic detected ", zap.Any("stacktrace", r))
+		}
+	}()
 	success := kvpb.Success{Success: false}
 	wb := s.db.NewWriteBatch()
 	defer wb.Cancel()
@@ -80,12 +90,17 @@ func (s *Store) delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Succ
 // Set keys.
 func (s *Store) Set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, error) {
 	// s.logger.Info("set on", zap.String("node", s.mlNodeName), zap.Int("clients", len(s.grpcClients)))
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("Panic detected ", zap.Any("stacktrace", r))
+		}
+	}()
 	success, err := s.set(ctx, req)
 	if err != nil || !success.Success {
 		return success, err
 	}
 	for name, client := range s.grpcClients {
-		go propogateSet(s.logger, client, name, req)
+		go s.propogateSet(s.logger, client, name, req)
 	}
 
 	return success, err
@@ -93,6 +108,11 @@ func (s *Store) Set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, e
 
 // Delete keys.
 func (s *Store) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Success, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("Panic detected ", zap.Any("stacktrace", r))
+		}
+	}()
 	success, err := s.delete(ctx, req)
 	if err != nil || !success.Success {
 		return success, err
@@ -106,6 +126,11 @@ func (s *Store) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Succ
 
 // Get keys.
 func (s *Store) Get(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResponse, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("Panic detected ", zap.Any("stacktrace", r))
+		}
+	}()
 	gr, err := s.get(ctx, in)
 	if len(gr.KeysNotFound) == 0 && err == nil {
 		return gr, err
@@ -135,7 +160,13 @@ func (s *Store) Get(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResponse
 	return gr, err
 }
 
-func propogateSet(logger *zap.Logger, client kvpb.KeyValueStoreClient, name string, req *kvpb.SetRequest) {
+func (s *Store) propogateSet(logger *zap.Logger, client kvpb.KeyValueStoreClient, name string, req *kvpb.SetRequest) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("Panic detected ", zap.Any("stacktrace", r))
+		}
+	}()
+
 	ctx := context.Background()
 	success, err := client.GRPCSet(ctx, req)
 	if err != nil {
@@ -144,6 +175,11 @@ func propogateSet(logger *zap.Logger, client kvpb.KeyValueStoreClient, name stri
 }
 
 func propogateDelete(logger *zap.Logger, client kvpb.KeyValueStoreClient, name string, req *kvpb.DeleteRequest) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("Panic detected ", zap.Any("stacktrace", r))
+		}
+	}()
 	ctx := context.Background()
 	success, err := client.GRPCDelete(ctx, req)
 	if err != nil {

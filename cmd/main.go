@@ -76,7 +76,7 @@ func main() {
 		})
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	ctx := context.Background()
 
@@ -85,7 +85,7 @@ func main() {
 		logger.Error("error Set", zap.Error(err))
 	}
 	if !success.Success {
-		logger.Info("set did not succied")
+		logger.Info("set failed")
 	}
 
 	time.Sleep(1 * time.Minute)

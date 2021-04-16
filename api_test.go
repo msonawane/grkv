@@ -1,7 +1,6 @@
 package grkv
 
 import (
-	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -106,7 +105,7 @@ func TestSet(t *testing.T) {
 		if len(resp.KeysNotFound) != 1 {
 			t.Errorf("response.KeysNotFound should have %d keys, got: %d", 1, len(resp.KeysNotFound))
 		}
-		if bytes.Compare(resp.KeysNotFound[0], []byte("not-in-db")) != 0 {
+		if string(resp.KeysNotFound[0]) != "not-in-db" {
 			t.Errorf("keys not found should have not-in-db; got %s", resp.KeysNotFound[0])
 		}
 	})
@@ -149,7 +148,10 @@ func TestGet(t *testing.T) {
 		if len(resp.KeysNotFound) != 1 {
 			t.Errorf("response.KeysNotFound should have 1 key")
 		}
-		if bytes.Compare(resp.KeysNotFound[0], []byte("not-in-db")) != 0 {
+		// if bytes.Compare(resp.KeysNotFound[0], []byte("not-in-db")) == 0 {
+		// 	t.Errorf("keys not found should have not-in-db; got %s", resp.KeysNotFound[0])
+		// }
+		if string(resp.KeysNotFound[0]) != "not-in-db" {
 			t.Errorf("keys not found should have not-in-db; got %s", resp.KeysNotFound[0])
 		}
 	})
@@ -179,7 +181,7 @@ func TestFuzzingSet(t *testing.T) {
 		sr := kvpb.SetRequest{}
 		f := fuzz.New().NilChance(0.5)
 		f.Fuzz(&sr)
-		t.Logf("sr: %#v\n", &sr)
+		// t.Logf("sr: %#v\n", &sr)
 
 		success, err := store.set(ctx, &sr)
 		if err != nil {
@@ -198,7 +200,7 @@ func TestFuzzingGet(t *testing.T) {
 		gr := kvpb.GetRequest{}
 		f := fuzz.New().NilChance(0.5)
 		f.Fuzz(&gr)
-		t.Logf("gr: %#v\n", &gr)
+		// t.Logf("gr: %#v\n", &gr)
 
 		_, err := store.get(ctx, &gr)
 		if err != nil {

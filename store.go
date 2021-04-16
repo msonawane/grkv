@@ -37,7 +37,6 @@ type Options struct {
 // Store holds database.
 type Store struct {
 	db                  *badger.DB
-	dbPath              string
 	vlogTicker          *time.Ticker // runs every 1m, check size of vlog and run GC conditionally.
 	mandatoryVlogTicker *time.Ticker // runs every 10m, we always run vlog GC.
 	logger              *zap.Logger
@@ -46,6 +45,8 @@ type Store struct {
 	grpcPort            int
 	grpcClients         map[string]kvpb.KeyValueStoreClient
 	grpcClientsLock     sync.RWMutex
+	replicatorChans     map[string]chan ReplicationRequest
+	replicatorChansLock sync.RWMutex
 	ml                  *memberlist.Memberlist
 	mlNodeName          string
 
@@ -55,10 +56,11 @@ type Store struct {
 // New returns Store
 func New(o *Options, logger *zap.Logger) (*Store, error) {
 	s := &Store{
-		logger:      logger,
-		grpcIP:      o.GRPCIP,
-		grpcPort:    o.GRPCPort,
-		grpcClients: make(map[string]kvpb.KeyValueStoreClient),
+		logger:          logger,
+		grpcIP:          o.GRPCIP,
+		grpcPort:        o.GRPCPort,
+		grpcClients:     make(map[string]kvpb.KeyValueStoreClient),
+		replicatorChans: make(map[string]chan ReplicationRequest),
 	}
 
 	// buld memberlist
@@ -164,6 +166,10 @@ func (s *Store) Close() error {
 	err := s.ml.Leave(1 * time.Second)
 	if err != nil {
 		s.logger.Error("error leaving member list", zap.Error(err))
+	}
+	for k, v := range s.replicatorChans {
+		close(v)
+		delete(s.replicatorChans, k)
 	}
 	s.stopGRPC()
 	if s.vlogTicker != nil {

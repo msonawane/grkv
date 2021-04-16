@@ -22,7 +22,7 @@ func (s *Store) GRPCGet(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResp
 
 // GRPCSet keys.
 func (s *Store) GRPCSet(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, error) {
-	s.logger.Info("GRPCSet on ", zap.String("node", s.mlNodeName))
+	// s.logger.Info("GRPCSet on ", zap.String("node", s.mlNodeName))
 
 	return s.set(ctx, req)
 }
@@ -48,11 +48,14 @@ func (s *Store) stopGRPC() {
 	s.grpcServer.GracefulStop()
 }
 
-func (s *Store) newGRPCClient(name, addr string) error {
-	s.grpcClientsLock.Lock()
-	defer s.grpcClientsLock.Unlock()
+func (s *Store) addNode(name, addr string) error {
 
 	if s.mlNodeName != name {
+		s.grpcClientsLock.Lock()
+		defer s.grpcClientsLock.Unlock()
+		s.replicatorChansLock.Lock()
+		defer s.replicatorChansLock.Unlock()
+
 		addr = fmt.Sprintf("%s:%d", addr, s.grpcPort)
 		s.logger.Info("creating grpc client for", zap.String("node", name), zap.String("addr", addr))
 		ctx := context.Background()
@@ -65,13 +68,28 @@ func (s *Store) newGRPCClient(name, addr string) error {
 		s.grpcClients[name] = client
 		fmt.Printf("client: %#v\n", client)
 
+		rc := make(chan ReplicationRequest)
+		s.replicatorChans[name] = rc
+		go s.replicator(name, addr, rc, client)
 	}
 	return nil
 
 }
 
-func (s *Store) removeGRPCClient(nodeName string) {
-	s.grpcClientsLock.Lock()
-	defer s.grpcClientsLock.Unlock()
-	delete(s.grpcClients, nodeName)
+func (s *Store) removeNode(nodeName string) {
+	if s.mlNodeName != nodeName {
+		s.grpcClientsLock.Lock()
+		defer s.grpcClientsLock.Unlock()
+		s.replicatorChansLock.Lock()
+		defer s.replicatorChansLock.Unlock()
+		v, ok := s.replicatorChans[nodeName]
+		if ok {
+			close(v)
+			delete(s.replicatorChans, nodeName)
+		}
+		_, ok = s.grpcClients[nodeName]
+		if ok {
+			delete(s.grpcClients, nodeName)
+		}
+	}
 }

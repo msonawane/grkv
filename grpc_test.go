@@ -63,7 +63,6 @@ func TestGRPCGet(t *testing.T) {
 	if len(resp.Data) != len(keys) {
 		t.Errorf("response.Data size should match keys size")
 	}
-
 }
 
 func TestGRPCDelete(t *testing.T) {

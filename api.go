@@ -19,7 +19,7 @@ func (s *Store) get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetRespons
 				continue
 			}
 			pair := kvpb.KeyValue{Key: key}
-			err = item.Value(func(val []byte) error {
+			_ = item.Value(func(val []byte) error {
 				pair.Value = val
 				resp.Data = append(resp.Data, &pair)
 				return nil
@@ -39,6 +39,7 @@ func (s *Store) set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, e
 			s.logger.Error("Panic detected ", zap.Any("stacktrace", r))
 		}
 	}()
+
 	success := kvpb.Success{Success: false}
 	wb := s.db.NewWriteBatch()
 	defer wb.Cancel()
@@ -99,10 +100,11 @@ func (s *Store) Set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, e
 	if err != nil || !success.Success {
 		return success, err
 	}
-	for name, client := range s.grpcClients {
-		go s.propogateSet(s.logger, client, name, req)
+	rr := ReplicationRequest{
+		Type:       "SET",
+		SetRequest: req,
 	}
-
+	go s.Replicate(rr)
 	return success, err
 }
 
@@ -117,9 +119,11 @@ func (s *Store) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Succ
 	if err != nil || !success.Success {
 		return success, err
 	}
-	for name, client := range s.grpcClients {
-		go propogateDelete(s.logger, client, name, req)
+	rr := ReplicationRequest{
+		Type:       "DELETE",
+		DelRequest: req,
 	}
+	go s.Replicate(rr)
 
 	return success, err
 }
@@ -158,33 +162,6 @@ func (s *Store) Get(ctx context.Context, in *kvpb.GetRequest) (*kvpb.GetResponse
 	}
 
 	return gr, err
-}
-
-func (s *Store) propogateSet(logger *zap.Logger, client kvpb.KeyValueStoreClient, name string, req *kvpb.SetRequest) {
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Error("Panic detected ", zap.Any("stacktrace", r))
-		}
-	}()
-
-	ctx := context.Background()
-	success, err := client.GRPCSet(ctx, req)
-	if err != nil {
-		logger.Error("error wrinting to remote node", zap.Error(err), zap.Any("success", success), zap.String("node", name))
-	}
-}
-
-func propogateDelete(logger *zap.Logger, client kvpb.KeyValueStoreClient, name string, req *kvpb.DeleteRequest) {
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Error("Panic detected ", zap.Any("stacktrace", r))
-		}
-	}()
-	ctx := context.Background()
-	success, err := client.GRPCDelete(ctx, req)
-	if err != nil {
-		logger.Error("error wrinting to remote node", zap.Error(err), zap.Any("success", success), zap.String("node", name))
-	}
 }
 
 func (s *Store) GetWithStringKeys(ctx context.Context, keys ...string) (*kvpb.GetResponse, error) {

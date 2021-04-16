@@ -8,14 +8,14 @@ import (
 // NotifyJoin logs new node joining event.
 func (s *Store) NotifyJoin(node *memberlist.Node) {
 	s.logger.Info("node joined", zap.Any("node_joined", node.Name), zap.Any("metadata", node.Meta))
-	s.newGRPCClient(node.Name, node.Addr.String())
+	s.addNode(node.Name, node.Addr.String())
 
 }
 
 // NotifyLeave logs new node leave event.
 func (s *Store) NotifyLeave(node *memberlist.Node) {
 	s.logger.Info("node left", zap.Any("node", node))
-	go s.removeGRPCClient(node.Name)
+	go s.removeNode(node.Name)
 
 }
 

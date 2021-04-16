@@ -101,7 +101,7 @@ func (s *Store) Set(ctx context.Context, req *kvpb.SetRequest) (*kvpb.Success, e
 		return success, err
 	}
 	rr := ReplicationRequest{
-		Type:       "SET",
+		Type:       SET,
 		SetRequest: req,
 	}
 	go s.Replicate(rr)
@@ -120,7 +120,7 @@ func (s *Store) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.Succ
 		return success, err
 	}
 	rr := ReplicationRequest{
-		Type:       "DELETE",
+		Type:       DELETE,
 		DelRequest: req,
 	}
 	go s.Replicate(rr)

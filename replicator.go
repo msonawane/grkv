@@ -8,8 +8,13 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	SET    = 0
+	DELETE = 1
+)
+
 type ReplicationRequest struct {
-	Type       string
+	Type       int
 	SetRequest *kvpb.SetRequest
 	DelRequest *kvpb.DeleteRequest
 }
@@ -26,14 +31,14 @@ func (s *Store) replicator(name, addr string, reqChan chan ReplicationRequest, c
 		}
 		ctx, cancelFunc := context.WithDeadline(context.Background(), time.Now().Add(deadLine))
 
-		if v.SetRequest != nil {
+		if v.Type == SET {
 			_, err := client.GRPCSet(ctx, v.SetRequest)
 			if err != nil {
 				errorCounter = errorCounter + 1
 				s.logger.Error("error in replication", zap.Error(err))
 			}
 		}
-		if v.DelRequest != nil {
+		if v.Type != DELETE {
 			_, err := client.GRPCDelete(ctx, v.DelRequest)
 			if err != nil {
 				errorCounter = errorCounter + 1
